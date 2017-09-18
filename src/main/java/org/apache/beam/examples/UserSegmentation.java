@@ -18,6 +18,7 @@
 package org.apache.beam.examples;
 
 import org.apache.beam.examples.common.User;
+import org.apache.beam.examples.events.OrderShippedEvent;
 import org.apache.beam.examples.events.UserActivationEvent;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.TextIO;
@@ -118,6 +119,22 @@ public class UserSegmentation {
     }
   }
 
+  static class ParseOrderShippedEvent extends DoFn<String, OrderShippedEvent> {
+    private final Counter numParseErrors = Metrics.counter("main", "ParseErrors");
+
+    @ProcessElement
+    public void processElement(ProcessContext c) {
+      String[] fields = c.element().split(",");
+        int orderId = Integer.parseInt(fields[0]);
+        int userId = Integer.parseInt(fields[1]);
+        Instant occuredAt = Instant.parse(fields[2]);
+
+        OrderShippedEvent orderShippedEvent = new OrderShippedEvent(orderId, userId, occuredAt);
+        c.outputWithTimestamp(orderShippedEvent, occuredAt);
+    }
+  }
+
+
   static class keyByZipCluster extends DoFn<User, KV<String, User>> {
     @ProcessElement
     public void processElement(ProcessContext c) {
@@ -134,10 +151,10 @@ public class UserSegmentation {
 
 
   /** A SimpleFunction that converts a Word and Count into a printable string. */
-  public static class FormatAsTextFn extends SimpleFunction<UserActivationEvent, String> {
+  public static class FormatAsTextFn<T> extends SimpleFunction<KV<Integer, T>, String> {
     @Override
-    public String apply(UserActivationEvent input) {
-      return String.format("something: %s", input.toString());
+    public String apply(KV<Integer, T> input) {
+      return String.format("user_id: %s -> %s", input.getKey(), input.getValue().toString());
     }
   }
 
@@ -162,6 +179,11 @@ public class UserSegmentation {
     String getInputFile();
     void setInputFile(String value);
 
+    @Description("Path of order events file to read from")
+    String getOrdersFile();
+    void setOrdersFile(String value);
+
+
     /**
      * Set this required option to specify where to write the output.
      */
@@ -179,11 +201,31 @@ public class UserSegmentation {
 
     // Concepts #2 and #3: Our pipeline applies the composite CountWords transform, and passes the
     // static FormatAsTextFn() to the ParDo transform.
-    PCollection<UserActivationEvent> userActivationEvents =
+    PCollection<KV<Integer, UserActivationEvent>> userActivationEvents =
         p.apply("ReadLines", TextIO.read().from(options.getInputFile()))
-         .apply(ParDo.of(new ParseUserActivationEvent()));
+         .apply(ParDo.of(new ParseUserActivationEvent()))
+         .apply(WithKeys.of(new SerializableFunction<UserActivationEvent, Integer>() {
+              @Override
+              public Integer apply(UserActivationEvent input) {
+                return input.getUserId();
+              }
+            }));
 
-    userActivationEvents.apply(MapElements.via(new FormatAsTextFn()))
+    PCollection<KV<Integer, OrderShippedEvent>> orderShippedEvents =
+        p.apply("ReadLines", TextIO.read().from(options.getOrdersFile()))
+            .apply(ParDo.of(new ParseOrderShippedEvent()))
+            .apply(WithKeys.of(new SerializableFunction<OrderShippedEvent, Integer>() {
+              @Override
+              public Integer apply(OrderShippedEvent input) {
+                return input.getUserId();
+              }
+            }));
+
+    orderShippedEvents.apply(MapElements.via(new FormatAsTextFn<OrderShippedEvent>()))
+        .apply("WriteCounts", TextIO.write().to(options.getOutput()));
+
+
+    userActivationEvents.apply(MapElements.via(new FormatAsTextFn<UserActivationEvent>()))
                         .apply("WriteCounts", TextIO.write().to(options.getOutput()));
 
     p.run().waitUntilFinish();
