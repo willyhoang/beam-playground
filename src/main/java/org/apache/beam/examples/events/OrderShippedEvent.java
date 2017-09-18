@@ -2,8 +2,7 @@ package org.apache.beam.examples.events;
 
 import org.apache.beam.sdk.coders.AvroCoder;
 import org.apache.beam.sdk.coders.DefaultCoder;
-
-import java.sql.Timestamp;
+import org.joda.time.Instant;
 
 /**
  * Class to hold information about an order shipped event.
@@ -12,12 +11,12 @@ import java.sql.Timestamp;
 public class OrderShippedEvent {
   private Integer orderId;
   private Integer userId;
-  private Timestamp occuredAt;
+  private Instant occuredAt;
 
   public OrderShippedEvent() {
   }
 
-  public OrderShippedEvent(Integer orderId, Integer userId, Timestamp occuredAt) {
+  public OrderShippedEvent(Integer orderId, Integer userId, Instant occuredAt) {
     this.orderId = orderId;
     this.userId = userId;
     this.occuredAt = occuredAt;
@@ -39,11 +38,20 @@ public class OrderShippedEvent {
     this.userId = userId;
   }
 
-  public Timestamp getOccuredAt() {
+  public Instant getOccuredAt() {
     return occuredAt;
   }
 
-  public void setOccuredAt(Timestamp occuredAt) {
+  public void setOccuredAt(Instant occuredAt) {
     this.occuredAt = occuredAt;
+  }
+
+  @Override
+  public String toString() {
+    return "OrderShippedEvent{" +
+        "orderId=" + orderId +
+        ", userId=" + userId +
+        ", occuredAt=" + occuredAt +
+        '}';
   }
 }
