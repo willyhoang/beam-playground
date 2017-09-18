@@ -18,6 +18,7 @@
 package org.apache.beam.examples;
 
 import org.apache.beam.examples.common.ExampleUtils;
+import org.apache.beam.examples.common.User;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.TextIO;
 import org.apache.beam.sdk.metrics.Counter;
@@ -30,6 +31,8 @@ import org.apache.beam.sdk.options.Validation.Required;
 import org.apache.beam.sdk.transforms.*;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
+import org.apache.beam.sdk.values.TypeDescriptor;
+import org.apache.beam.sdk.values.TypeDescriptors;
 
 import java.util.logging.Logger;
 
@@ -105,13 +108,47 @@ public class UserZipcodeClustering {
     }
   }
 
-  /** A SimpleFunction that converts a Word and Count into a printable string. */
-  public static class FormatAsTextFn extends SimpleFunction<KV<String, Long>, String> {
-    @Override
-    public String apply(KV<String, Long> input) {
-      return input.getKey() + ": " + input.getValue();
+  static class ParseUserInfo extends DoFn<String, User> {
+    private final Counter numParseErrors = Metrics.counter("main", "ParseErrors");
+
+    @ProcessElement
+    public void processElement(ProcessContext c) {
+      String[] fields = c.element().split(",");
+      try {
+        int userId = Integer.parseInt(fields[0]);
+        int zipCode = Integer.parseInt(fields[40]);
+        User parsedUser = new User(userId, zipCode);
+        c.output(parsedUser);
+      } catch (NumberFormatException e) {
+        numParseErrors.inc();
+        logger.info("Could not parse fields correctly on " + c.element() + "," + e.getMessage());
+      }
     }
   }
+
+  static class keyByZipCluster extends DoFn<User, KV<Integer, User>> {
+    @ProcessElement
+    public void processElement(ProcessContext c) {
+      User user = c.element();
+      Integer zipCluster = getZipCluster(user.getZipCode());
+      c.output(KV.<Integer, User>of(zipCluster, user));
+    }
+
+    private Integer getZipCluster(Integer zipCode) {
+      return zipCode / 100;
+    }
+
+  }
+
+
+  /** A SimpleFunction that converts a Word and Count into a printable string. */
+  public static class FormatAsTextFn extends SimpleFunction<KV<Integer, User>, String> {
+    @Override
+    public String apply(KV<Integer, User> input) {
+      return String.format("zip: %d -> user_id: %d", input.getKey(), input.getValue().getUserId());
+    }
+  }
+
 
   /**
    * A PTransform that converts a PCollection containing lines of text into a PCollection of
@@ -175,10 +212,12 @@ public class UserZipcodeClustering {
 
     // Concepts #2 and #3: Our pipeline applies the composite CountWords transform, and passes the
     // static FormatAsTextFn() to the ParDo transform.
-    p.apply("ReadLines", TextIO.read().from(options.getInputFile()));
-//     .apply(new CountWords())
-//     .apply(MapElements.via(new FormatAsTextFn()))
-//     .apply("WriteCounts", TextIO.write().to(options.getOutput()));
+    p.apply("ReadLines", TextIO.read().from(options.getInputFile()))
+        .apply(Filter.by((String line) -> !line.contains("user_id,meal_plan")))
+        .apply(ParDo.of(new ParseUserInfo()))
+        .apply(ParDo.of(new keyByZipCluster()))
+        .apply(MapElements.via(new FormatAsTextFn()))
+        .apply("WriteCounts", TextIO.write().to(options.getOutput()));
 
     p.run().waitUntilFinish();
   }

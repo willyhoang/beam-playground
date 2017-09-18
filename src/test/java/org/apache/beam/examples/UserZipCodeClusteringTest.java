@@ -17,9 +17,13 @@
  */
 package org.apache.beam.examples;
 
-import com.google.common.io.Files;
 import org.apache.beam.examples.DebuggingWordCount.WordCountOptions;
+import org.apache.beam.sdk.io.TextIO;
+import org.apache.beam.sdk.testing.PAssert;
 import org.apache.beam.sdk.testing.TestPipeline;
+import org.apache.beam.sdk.transforms.Create;
+import org.apache.beam.sdk.transforms.Filter;
+import org.apache.beam.sdk.values.PCollection;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -27,10 +31,11 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 import java.io.File;
-import java.nio.charset.StandardCharsets;
+import java.io.InputStream;
+import java.net.URL;
 
 /**
- * Tests for {@link DebuggingWordCount}.
+ * Tests for {@link UserZipcodeClustering}.
  */
 @RunWith(JUnit4.class)
 public class UserZipCodeClusteringTest {
@@ -38,16 +43,30 @@ public class UserZipCodeClusteringTest {
 
   @Test
   public void testDebuggingWordCount() throws Exception {
-    File inputFile = tmpFolder.newFile();
+    URL fileUrl = this.getClass().getResource("/results-20170915-113730.csv");
+    String filePath = fileUrl.getPath();
+    File testFile = new File(filePath);
     File outputFile = tmpFolder.newFile();
-    Files.write(
-        "stomach secret Flourish message Flourish here Flourish",
-        inputFile,
-        StandardCharsets.UTF_8);
+
     WordCountOptions options =
         TestPipeline.testingPipelineOptions().as(WordCountOptions.class);
-    options.setInputFile(inputFile.getAbsolutePath());
+    options.setInputFile(testFile.getAbsolutePath());
     options.setOutput(outputFile.getAbsolutePath());
-    DebuggingWordCount.main(TestPipeline.convertToArgs(options));
+    UserZipcodeClustering.main(TestPipeline.convertToArgs(options));
+  }
+
+  @Rule
+  public TestPipeline p = TestPipeline.create();
+
+  @Test
+  public void testUser() throws Exception {
+    URL fileUrl = this.getClass().getResource("/results-20170915-113730.csv");
+    String filePath = fileUrl.getPath();
+
+    PCollection<String> lines = p.apply(TextIO.read().from(filePath))
+        .apply(Filter.by((String line) -> !line.contains("user_id,meal_plan")));
+
+
+    p.run().waitUntilFinish();
   }
 }
