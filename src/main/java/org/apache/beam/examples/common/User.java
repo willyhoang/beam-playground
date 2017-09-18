@@ -9,12 +9,12 @@ import org.apache.beam.sdk.coders.DefaultCoder;
 @DefaultCoder(AvroCoder.class)
 public class User {
   private Integer userId;
-  private Integer zipCode;
+  private String zipCode;
 
   public User() {
   }
 
-  public User(Integer userId, Integer zipCode) {
+  public User(Integer userId, String zipCode) {
     this.userId = userId;
     this.zipCode = zipCode;
   }
@@ -27,11 +27,11 @@ public class User {
     this.userId = userId;
   }
 
-  public Integer getZipCode() {
+  public String getZipCode() {
     return zipCode;
   }
 
-  public void setZipCode(Integer zipCode) {
+  public void setZipCode(String zipCode) {
     this.zipCode = zipCode;
   }
 }

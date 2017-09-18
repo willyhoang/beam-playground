@@ -116,7 +116,11 @@ public class UserZipcodeClustering {
       String[] fields = c.element().split(",");
       try {
         int userId = Integer.parseInt(fields[0]);
-        int zipCode = Integer.parseInt(fields[40]);
+        String zipCode = fields[40];
+        if (zipCode.length() < 5) {
+          logger.info("Zipcode invalid for " + c.element());
+          return;
+        }
         User parsedUser = new User(userId, zipCode);
         c.output(parsedUser);
       } catch (NumberFormatException e) {
@@ -126,26 +130,26 @@ public class UserZipcodeClustering {
     }
   }
 
-  static class keyByZipCluster extends DoFn<User, KV<Integer, User>> {
+  static class keyByZipCluster extends DoFn<User, KV<String, User>> {
     @ProcessElement
     public void processElement(ProcessContext c) {
       User user = c.element();
-      Integer zipCluster = getZipCluster(user.getZipCode());
-      c.output(KV.<Integer, User>of(zipCluster, user));
+      String zipCluster = getZipCluster(user.getZipCode());
+      c.output(KV.<String, User>of(zipCluster, user));
     }
 
-    private Integer getZipCluster(Integer zipCode) {
-      return zipCode / 100;
+    private String getZipCluster(String zipCode) {
+      return zipCode.substring(0, 3);
     }
 
   }
 
 
   /** A SimpleFunction that converts a Word and Count into a printable string. */
-  public static class FormatAsTextFn extends SimpleFunction<KV<Integer, User>, String> {
+  public static class FormatAsTextFn extends SimpleFunction<KV<String, User>, String> {
     @Override
-    public String apply(KV<Integer, User> input) {
-      return String.format("zip: %d -> user_id: %d", input.getKey(), input.getValue().getUserId());
+    public String apply(KV<String, User> input) {
+      return String.format("zip: %s -> user_id: %d", input.getKey(), input.getValue().getUserId());
     }
   }
 
