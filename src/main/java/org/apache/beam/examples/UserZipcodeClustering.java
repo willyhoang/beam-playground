@@ -17,6 +17,7 @@
  */
 package org.apache.beam.examples;
 
+import com.google.common.collect.Iterables;
 import org.apache.beam.examples.common.ExampleUtils;
 import org.apache.beam.examples.common.User;
 import org.apache.beam.sdk.Pipeline;
@@ -139,17 +140,17 @@ public class UserZipcodeClustering {
     }
 
     private String getZipCluster(String zipCode) {
-      return zipCode.substring(0, 3);
+      return zipCode.substring(0, 1);
     }
 
   }
 
 
   /** A SimpleFunction that converts a Word and Count into a printable string. */
-  public static class FormatAsTextFn extends SimpleFunction<KV<String, User>, String> {
+  public static class FormatAsTextFn extends SimpleFunction<KV<String, Long>, String> {
     @Override
-    public String apply(KV<String, User> input) {
-      return String.format("zip: %s -> user_id: %d", input.getKey(), input.getValue().getUserId());
+    public String apply(KV<String, Long> input) {
+      return String.format("zip: %s -> Num users: %d", input.getKey(), input.getValue());
     }
   }
 
@@ -220,6 +221,7 @@ public class UserZipcodeClustering {
         .apply(Filter.by((String line) -> !line.contains("user_id,meal_plan")))
         .apply(ParDo.of(new ParseUserInfo()))
         .apply(ParDo.of(new keyByZipCluster()))
+        .apply(Count.perKey())
         .apply(MapElements.via(new FormatAsTextFn()))
         .apply("WriteCounts", TextIO.write().to(options.getOutput()));
 
