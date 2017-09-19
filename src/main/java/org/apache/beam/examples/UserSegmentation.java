@@ -17,6 +17,7 @@
  */
 package org.apache.beam.examples;
 
+import com.google.cloud.Tuple;
 import org.apache.beam.examples.common.User;
 import org.apache.beam.examples.events.OrderShippedEvent;
 import org.apache.beam.examples.events.UserActivationEvent;
@@ -30,8 +31,12 @@ import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.options.Validation.Required;
 import org.apache.beam.sdk.transforms.*;
+import org.apache.beam.sdk.transforms.join.CoGbkResult;
+import org.apache.beam.sdk.transforms.join.CoGroupByKey;
+import org.apache.beam.sdk.transforms.join.KeyedPCollectionTuple;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
+import org.apache.beam.sdk.values.TupleTag;
 import org.joda.time.Instant;
 
 import java.util.logging.Logger;
@@ -247,6 +252,24 @@ public class UserSegmentation {
         .apply("WriteCounts", TextIO.write().to(options.getOutput2()));
 
 
+    TupleTag<Boolean> activeFlagTag = new TupleTag<Boolean>();
+    TupleTag<Long> orderCountTag = new TupleTag<Long>();
+
+    PCollection<KV<Integer, CoGbkResult>> usersState = KeyedPCollectionTuple
+        .of(orderCountTag, usersNumShippedOrders)
+        .and(activeFlagTag, usersIsActive)
+        .apply(CoGroupByKey.<Integer>create());
+
+    usersState.apply(MapElements.via(new SimpleFunction<KV<Integer, CoGbkResult>, String>() {
+       @Override
+       public String apply(KV<Integer, CoGbkResult> input) {
+         boolean isActive = input.getValue().getOnly(activeFlagTag);
+         long orderCount = input.getValue().getOnly(orderCountTag);
+         return String.format("User id: %d, Active: %b, Orders: %d", input.getKey(), isActive, orderCount);
+       }
+     }
+    ))
+    .apply("WriteMerged", TextIO.write().to("countsMerged"));
 
 
     p.run().waitUntilFinish();
