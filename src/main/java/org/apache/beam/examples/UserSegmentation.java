@@ -19,6 +19,8 @@ package org.apache.beam.examples;
 
 import com.google.cloud.Tuple;
 import org.apache.beam.examples.common.User;
+import org.apache.beam.examples.common.UserSegment;
+import org.apache.beam.examples.common.UserStats;
 import org.apache.beam.examples.events.OrderShippedEvent;
 import org.apache.beam.examples.events.UserActivationEvent;
 import org.apache.beam.sdk.Pipeline;
@@ -151,7 +153,6 @@ public class UserSegmentation {
     private String getZipCluster(String zipCode) {
       return zipCode.substring(0, 1);
     }
-
   }
 
   /** A SimpleFunction that converts a Word and Count into a printable string. */
@@ -255,16 +256,25 @@ public class UserSegmentation {
     TupleTag<Boolean> activeFlagTag = new TupleTag<Boolean>();
     TupleTag<Long> orderCountTag = new TupleTag<Long>();
 
-    PCollection<KV<Integer, CoGbkResult>> usersState = KeyedPCollectionTuple
+    PCollection<KV<Integer, UserStats>> usersState = KeyedPCollectionTuple
         .of(orderCountTag, usersNumShippedOrders)
         .and(activeFlagTag, usersIsActive)
-        .apply(CoGroupByKey.<Integer>create());
+        .apply(CoGroupByKey.<Integer>create())
+        .apply(MapElements.via(new SimpleFunction<KV<Integer, CoGbkResult>, KV<Integer, UserStats>>() {
+          @Override
+          public KV<Integer, UserStats> apply(KV<Integer, CoGbkResult> input) {
+            boolean isActive = input.getValue().getOnly(activeFlagTag);
+            long orderCount = input.getValue().getOnly(orderCountTag);
+            UserStats userStats = new UserStats(isActive, orderCount);
+            return KV.of(input.getKey(), userStats);
+          }
+        }));
 
-    usersState.apply(MapElements.via(new SimpleFunction<KV<Integer, CoGbkResult>, String>() {
+    usersState.apply(MapElements.via(new SimpleFunction<KV<Integer, UserStats>, String>() {
        @Override
-       public String apply(KV<Integer, CoGbkResult> input) {
-         boolean isActive = input.getValue().getOnly(activeFlagTag);
-         long orderCount = input.getValue().getOnly(orderCountTag);
+       public String apply(KV<Integer, UserStats> input) {
+         boolean isActive = input.getValue().isActive();
+         long orderCount = input.getValue().getNumOrdersShipped();
          return String.format("User id: %d, Active: %b, Orders: %d", input.getKey(), isActive, orderCount);
        }
      }
