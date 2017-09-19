@@ -17,7 +17,6 @@
  */
 package org.apache.beam.examples;
 
-import com.google.cloud.Tuple;
 import org.apache.beam.examples.common.User;
 import org.apache.beam.examples.common.UserSegment;
 import org.apache.beam.examples.common.UserStats;
@@ -155,6 +154,29 @@ public class UserSegmentation {
     }
   }
 
+  static class AssignUserSegment extends SimpleFunction<KV<Integer, UserStats>, KV<Integer, UserSegment>> {
+    @Override
+    public KV<Integer, UserSegment> apply(KV<Integer, UserStats> input) {
+      boolean isActive = input.getValue().isActive();
+      long numOrders = input.getValue().getNumOrdersShipped();
+      UserSegment assignment = null;
+      if (!isActive) {
+        assignment = UserSegment.DEACTIVATED_USER;
+      } else {
+        if (numOrders == 0) {
+          assignment = UserSegment.NEW_USER;
+        } else if (numOrders == 1) {
+          assignment = UserSegment.NEW_USER_WITH_FIRST_ORDER;
+        } else if (numOrders == 2) {
+          assignment = UserSegment.NEW_USER_WITH_SECOND_ORDER;
+        } else if (numOrders >= 3) {
+          assignment = UserSegment.ANCIENT_USER;
+        }
+      }
+      return KV.of(input.getKey(), assignment);
+    }
+  }
+
   /** A SimpleFunction that converts a Word and Count into a printable string. */
   public static class FormatAsTextFn<T> extends SimpleFunction<KV<Integer, T>, String> {
     @Override
@@ -281,6 +303,9 @@ public class UserSegmentation {
     ))
     .apply("WriteMerged", TextIO.write().to("countsMerged"));
 
+    usersState.apply(MapElements.via(new AssignUserSegment()))
+        .apply(MapElements.via(new FormatAsTextFn<UserSegment>()))
+        .apply("WriteCounts", TextIO.write().to("countsUserSegments"));
 
     p.run().waitUntilFinish();
   }
