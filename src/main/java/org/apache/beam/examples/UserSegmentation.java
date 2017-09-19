@@ -239,6 +239,7 @@ public class UserSegmentation {
     PCollection<KV<Integer, UserActivationEvent>> userActivationEvents =
         p.apply("ReadLines", TextIO.read().from(options.getInputFile()))
          .apply(ParDo.of(new ParseUserActivationEvent()))
+         .apply(WithTimestamps.of((UserActivationEvent event) -> event.getOccuredAt()))
          .apply(WithKeys.of(new SerializableFunction<UserActivationEvent, Integer>() {
               @Override
               public Integer apply(UserActivationEvent input) {
@@ -261,6 +262,7 @@ public class UserSegmentation {
     PCollection<KV<Integer, OrderShippedEvent>> orderShippedEvents =
         p.apply("ReadLines", TextIO.read().from(options.getOrdersFile()))
             .apply(ParDo.of(new ParseOrderShippedEvent()))
+            .apply(WithTimestamps.of((OrderShippedEvent event) -> event.getOccuredAt()))
             .apply(WithKeys.of(new SerializableFunction<OrderShippedEvent, Integer>() {
               @Override
               public Integer apply(OrderShippedEvent input) {
