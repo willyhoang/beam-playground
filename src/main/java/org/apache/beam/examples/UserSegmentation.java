@@ -149,7 +149,6 @@ public class UserSegmentation {
 
   }
 
-
   /** A SimpleFunction that converts a Word and Count into a printable string. */
   public static class FormatAsTextFn<T> extends SimpleFunction<KV<Integer, T>, String> {
     @Override
@@ -183,7 +182,6 @@ public class UserSegmentation {
     String getOrdersFile();
     void setOrdersFile(String value);
 
-
     /**
      * Set this required option to specify where to write the output.
      */
@@ -191,6 +189,15 @@ public class UserSegmentation {
     @Required
     String getOutput();
     void setOutput(String value);
+
+    /**
+     * Set this required option to specify where to write the output.
+     */
+    @Description("Path of the file to write to")
+    @Required
+    String getOutput2();
+    void setOutput2(String value);
+
   }
 
   public static void main(String[] args) {
@@ -211,6 +218,18 @@ public class UserSegmentation {
               }
             }));
 
+    PCollection<KV<Integer, Boolean>> usersIsActive = userActivationEvents
+        .apply(Latest.perKey())
+        .apply(ParDo.of(new DoFn<KV<Integer, UserActivationEvent>, KV<Integer, Boolean>>() {
+          @ProcessElement
+          public void processElement(ProcessContext c) {
+            c.output(KV.of(c.element().getKey(), c.element().getValue().isActive()));
+          }
+        }));
+
+    usersIsActive.apply(MapElements.via(new FormatAsTextFn<Boolean>()))
+        .apply("WriteCounts", TextIO.write().to(options.getOutput()));
+
     PCollection<KV<Integer, OrderShippedEvent>> orderShippedEvents =
         p.apply("ReadLines", TextIO.read().from(options.getOrdersFile()))
             .apply(ParDo.of(new ParseOrderShippedEvent()))
@@ -221,12 +240,14 @@ public class UserSegmentation {
               }
             }));
 
-    orderShippedEvents.apply(MapElements.via(new FormatAsTextFn<OrderShippedEvent>()))
-        .apply("WriteCounts", TextIO.write().to(options.getOutput()));
+    PCollection<KV<Integer, Long>> usersNumShippedOrders = orderShippedEvents
+        .apply(Count.perKey());
+
+    usersNumShippedOrders.apply(MapElements.via(new FormatAsTextFn<Long>()))
+        .apply("WriteCounts", TextIO.write().to(options.getOutput2()));
 
 
-    userActivationEvents.apply(MapElements.via(new FormatAsTextFn<UserActivationEvent>()))
-                        .apply("WriteCounts", TextIO.write().to(options.getOutput()));
+
 
     p.run().waitUntilFinish();
   }
