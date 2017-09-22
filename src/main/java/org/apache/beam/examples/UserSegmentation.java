@@ -35,9 +35,11 @@ import org.apache.beam.sdk.transforms.*;
 import org.apache.beam.sdk.transforms.join.CoGbkResult;
 import org.apache.beam.sdk.transforms.join.CoGroupByKey;
 import org.apache.beam.sdk.transforms.join.KeyedPCollectionTuple;
+import org.apache.beam.sdk.transforms.windowing.*;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.TupleTag;
+import org.joda.time.Duration;
 import org.joda.time.Instant;
 
 import java.util.logging.Logger;
@@ -181,7 +183,12 @@ public class UserSegmentation {
   public static class FormatAsTextFn<T> extends SimpleFunction<KV<Integer, T>, String> {
     @Override
     public String apply(KV<Integer, T> input) {
-      return String.format("user_id: %s -> %s", input.getKey(), input.getValue().toString());
+      try {
+        return String.format("user_id: %s -> %s", input.getKey(), input.getValue().toString());
+      } catch (NullPointerException e) {
+        logger.info("Got a null value for: " + input);
+        return "";
+      }
     }
   }
 
@@ -240,6 +247,11 @@ public class UserSegmentation {
         p.apply("ReadLines", TextIO.read().from(options.getInputFile()))
          .apply(ParDo.of(new ParseUserActivationEvent()))
          .apply(WithTimestamps.of((UserActivationEvent event) -> event.getOccuredAt()))
+         .apply(Window.<UserActivationEvent>into(new GlobalWindows())
+             .withAllowedLateness(Duration.standardHours(0))
+             .triggering(DefaultTrigger.of())
+             .accumulatingFiredPanes()
+         )
          .apply(WithKeys.of(new SerializableFunction<UserActivationEvent, Integer>() {
               @Override
               public Integer apply(UserActivationEvent input) {
@@ -263,6 +275,11 @@ public class UserSegmentation {
         p.apply("ReadLines", TextIO.read().from(options.getOrdersFile()))
             .apply(ParDo.of(new ParseOrderShippedEvent()))
             .apply(WithTimestamps.of((OrderShippedEvent event) -> event.getOccuredAt()))
+            .apply(Window.<OrderShippedEvent>into(new GlobalWindows())
+                .triggering(DefaultTrigger.of())
+                .withAllowedLateness(Duration.standardHours(0))
+                .accumulatingFiredPanes()
+            )
             .apply(WithKeys.of(new SerializableFunction<OrderShippedEvent, Integer>() {
               @Override
               public Integer apply(OrderShippedEvent input) {
@@ -287,8 +304,8 @@ public class UserSegmentation {
         .apply(MapElements.via(new SimpleFunction<KV<Integer, CoGbkResult>, KV<Integer, UserStats>>() {
           @Override
           public KV<Integer, UserStats> apply(KV<Integer, CoGbkResult> input) {
-            boolean isActive = input.getValue().getOnly(activeFlagTag);
-            long orderCount = input.getValue().getOnly(orderCountTag);
+            boolean isActive = input.getValue().getOnly(activeFlagTag, false);
+            long orderCount = input.getValue().getOnly(orderCountTag, -1L);
             UserStats userStats = new UserStats(isActive, orderCount);
             return KV.of(input.getKey(), userStats);
           }
