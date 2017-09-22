@@ -249,7 +249,7 @@ public class UserSegmentation {
          .apply(WithTimestamps.of((UserActivationEvent event) -> event.getOccuredAt()))
          .apply(Window.<UserActivationEvent>into(new GlobalWindows())
              .withAllowedLateness(Duration.standardHours(0))
-             .triggering(DefaultTrigger.of())
+             .triggering(Repeatedly.forever(AfterProcessingTime.pastFirstElementInPane().plusDelayOf(Duration.standardSeconds(1))))
              .accumulatingFiredPanes()
          )
          .apply(WithKeys.of(new SerializableFunction<UserActivationEvent, Integer>() {
@@ -276,8 +276,8 @@ public class UserSegmentation {
             .apply(ParDo.of(new ParseOrderShippedEvent()))
             .apply(WithTimestamps.of((OrderShippedEvent event) -> event.getOccuredAt()))
             .apply(Window.<OrderShippedEvent>into(new GlobalWindows())
-                .triggering(DefaultTrigger.of())
-                .withAllowedLateness(Duration.standardHours(0))
+                .triggering(Repeatedly.forever(AfterProcessingTime.pastFirstElementInPane().plusDelayOf(Duration.standardSeconds(1))))
+                .withAllowedLateness(Duration.standardMinutes(2))
                 .accumulatingFiredPanes()
             )
             .apply(WithKeys.of(new SerializableFunction<OrderShippedEvent, Integer>() {
