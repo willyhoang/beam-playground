@@ -17,7 +17,6 @@
  */
 package org.apache.beam.examples;
 
-import org.apache.beam.examples.common.User;
 import org.apache.beam.examples.common.UserSegment;
 import org.apache.beam.examples.common.UserStats;
 import org.apache.beam.examples.events.OrderShippedEvent;
@@ -26,11 +25,9 @@ import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.TextIO;
 import org.apache.beam.sdk.metrics.Counter;
 import org.apache.beam.sdk.metrics.Metrics;
-import org.apache.beam.sdk.options.Default;
 import org.apache.beam.sdk.options.Description;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
-import org.apache.beam.sdk.options.Validation.Required;
 import org.apache.beam.sdk.transforms.*;
 import org.apache.beam.sdk.transforms.join.CoGbkResult;
 import org.apache.beam.sdk.transforms.join.CoGroupByKey;
@@ -129,40 +126,22 @@ public class UserSegmentation {
      * King Lear. Set this option to choose a different input file or glob.
      */
     @Description("Path of the file to read from")
-    @Default.String("gs://machinelearning.data.blueapron.com/willy/user_segmentation_attributes_1000")
-    String getInputFile();
-    void setInputFile(String value);
+    String getUserActivationsFile();
+    void setUserActivationsFile(String value);
 
     @Description("Path of order events file to read from")
-    String getOrdersFile();
-    void setOrdersFile(String value);
-
-    /**
-     * Set this required option to specify where to write the output.
-     */
-    @Description("Path of the file to write to")
-    @Required
-    String getOutput();
-    void setOutput(String value);
-
-    /**
-     * Set this required option to specify where to write the output.
-     */
-    @Description("Path of the file to write to")
-    @Required
-    String getOutput2();
-    void setOutput2(String value);
-
+    String getOrdersShippedFile();
+    void setOrdersShippedFile(String value);
   }
 
   public static void main(String[] args) {
     WordCountOptions options = PipelineOptionsFactory.fromArgs(args).withValidation()
       .as(WordCountOptions.class);
     Pipeline p = Pipeline.create(options);
-    logger.info("Input file: " +  options.getInputFile());
+    logger.info("Users activation events file:" +  options.getUserActivationsFile());
 
     PCollection<KV<Integer, UserActivationEvent>> userActivationEvents =
-        p.apply("ReadLines", TextIO.read().from(options.getInputFile()))
+        p.apply("ReadLines", TextIO.read().from(options.getUserActivationsFile()))
          .apply(ParDo.of(new ParseUserActivationEvent()))
          .apply(WithTimestamps.of((UserActivationEvent event) -> event.getOccuredAt()))
          .apply(Window.<UserActivationEvent>into(new GlobalWindows())
@@ -187,10 +166,10 @@ public class UserSegmentation {
         }));
 
     usersIsActive.apply(MapElements.via(new FormatAsTextFn<Boolean>()))
-        .apply("WriteCounts", TextIO.write().to(options.getOutput()));
+        .apply("WriteCounts", TextIO.write().to("counts"));
 
     PCollection<KV<Integer, OrderShippedEvent>> orderShippedEvents =
-        p.apply("ReadLines", TextIO.read().from(options.getOrdersFile()))
+        p.apply("ReadLines", TextIO.read().from(options.getOrdersShippedFile()))
             .apply(ParDo.of(new ParseOrderShippedEvent()))
             .apply(WithTimestamps.of((OrderShippedEvent event) -> event.getOccuredAt()))
             .apply(Window.<OrderShippedEvent>into(new GlobalWindows())
@@ -209,7 +188,7 @@ public class UserSegmentation {
         .apply(Count.perKey());
 
     usersNumShippedOrders.apply(MapElements.via(new FormatAsTextFn<Long>()))
-        .apply("WriteCounts", TextIO.write().to(options.getOutput2()));
+        .apply("WriteCounts", TextIO.write().to("counts2"));
 
 
     TupleTag<Boolean> activeFlagTag = new TupleTag<Boolean>();
