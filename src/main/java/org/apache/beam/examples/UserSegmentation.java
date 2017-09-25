@@ -97,7 +97,6 @@ public class UserSegmentation {
     }
   }
 
-  /** A SimpleFunction that converts a Word and Count into a printable string. */
   public static class FormatAsTextFn<T> extends SimpleFunction<KV<Integer, T>, String> {
     @Override
     public String apply(KV<Integer, T> input) {
@@ -110,21 +109,8 @@ public class UserSegmentation {
     }
   }
 
-  /**
-   * Options supported by {@link UserSegmentation}.
-   *
-   * <p>Concept #4: Defining your own configuration options. Here, you can add your own arguments
-   * to be processed by the command-line parser, and specify default values for them. You can then
-   * access the options values in your pipeline code.
-   *
-   * <p>Inherits standard configuration options.
-   */
   public interface WordCountOptions extends PipelineOptions {
 
-    /**
-     * By default, this example reads from a public dataset containing the text of
-     * King Lear. Set this option to choose a different input file or glob.
-     */
     @Description("Path of the file to read from")
     String getUserActivationsFile();
     void setUserActivationsFile(String value);
