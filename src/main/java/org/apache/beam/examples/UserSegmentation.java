@@ -109,7 +109,7 @@ public class UserSegmentation {
     }
   }
 
-  public interface WordCountOptions extends PipelineOptions {
+  public interface UserSegmentationOptions extends PipelineOptions {
 
     @Description("Path of the file to read from")
     String getUserActivationsFile();
@@ -121,8 +121,8 @@ public class UserSegmentation {
   }
 
   public static void main(String[] args) {
-    WordCountOptions options = PipelineOptionsFactory.fromArgs(args).withValidation()
-      .as(WordCountOptions.class);
+    UserSegmentationOptions options = PipelineOptionsFactory.fromArgs(args).withValidation()
+      .as(UserSegmentationOptions.class);
     Pipeline p = Pipeline.create(options);
     logger.info("Users activation events file:" +  options.getUserActivationsFile());
 
